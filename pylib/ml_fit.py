@@ -309,7 +309,7 @@ class MLfit(SKlearn):
         try:
             df['diffuse'] = get_diffuse(df) #self.get_diffuses(df)
         except Exception as mst:
-            #print("Fail diffuse"+mst, file=sys.stderr)
+            print("Fail diffuse"+mst, file=sys.stderr)
             print(mst, file=sys.stderr)
             df['diffuse']= np.nan
 

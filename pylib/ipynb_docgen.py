@@ -825,3 +825,8 @@ def show_fig(fn, *pars, fignum=None, caption=None,
     show( fig, fignum=fignum,  caption=cpn, facecolor=facecolor)
     if save_to is not None:
         fig.savefig(save_to, facecolor='w',  bbox_inches='tight')
+
+def show_date():
+    import datetime
+    date=str(datetime.datetime.now())[:16]
+    show(f"""<h5 style="text-align:right; margin-right:15px"> {date}</h5>""")
