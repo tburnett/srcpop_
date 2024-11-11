@@ -34,7 +34,8 @@ def lp_pars(fgl):
 #  create association with lower-case class1, combine 'unk','bcu', and '' to 'unID'
 def reclassify(class1):            
     cl = class1.lower()
-    return 'unID' if cl in ('unk','bcu', '') else cl
+    if cl == '' : return 'unID'
+    return 'bcu_unk' if cl in ('unk','bcu')  else cl
 
 #=======================================================================
 class MLfit(SKlearn):
@@ -44,15 +45,15 @@ class MLfit(SKlearn):
     ):
         self.df, self.cat_len = self.load_data(fgl)
         super().__init__(self.df, skprop)
-        self.palette =['cyan', 'magenta', 'yellow'] if dark_mode else 'green red blue'.split()
+        self.palette = np.array(['0.5','cyan','magenta'] if dark_mode else '0.5  blue red'.split())
         self.cache_file = f'files/{dataset}_{len(self.trainer_names)}_class_classification.csv'
         
         self.hue_kw={}
         self.size_kw={}
         if dark_mode:
-            self.hue_kw.update(palette='yellow magenta cyan'.split(), edgecolor=None)
+            self.hue_kw.update(palette='cyan 0.5 magenta'.split(), edgecolor=None)
         else:
-            self.hue_kw.update(palette='violet blue red'.split())   
+            self.hue_kw.update(palette='violet 0.5 red'.split())   
     
     def __repr__(self):
         return f"""MLfit applied to 4FGL-{dataset.upper()} \n\n{super().__repr__()}
@@ -62,7 +63,7 @@ class MLfit(SKlearn):
         """Extract subset of 4FGL information relevant to ML pulsar-like selection
         """
 
-        cols = 'glat glon significance flags r95 variability class1'.split()
+        cols = 'glat glon significance flags r95 variability class1 assoc_prob'.split()
         fgl = Fermi4FGL(fgl)
         
         # remove sources without variability or r95 but keep SNR
@@ -151,8 +152,9 @@ class MLfit(SKlearn):
                 pulsar = 'msp psr'.split(),
                 blazar = 'fsrq bll'.split(),
                 egal = 'agn gal sey nlsy1 sbg ssrq css rdg'.split(),
-                Gal ='gc bin glc hmb lmb nov pwn sfr snr spp'.split(),
-                unID   = ['', 'unk', 'bcu'],
+                Gal = ' bin glc hmb lmb pwn sfr snr spp'.split(), # leave off gc and nov
+                unID   = [''], 
+                bcu_unk = ['unk', 'bcu'],
                 )
             inv = dict()
             for gname, cls_list in gtbl.items():
@@ -161,28 +163,31 @@ class MLfit(SKlearn):
             return  df.class1.apply(lambda s: inv.get(s.lower(), s.lower()))
         df = self.df.copy()
         df['class_group']=agroup(self)    
-        df.groupby('class_group').size()   
+        # df.groupby('class_group').size()   
         def simple_pivot(df, x='prediction', y= 'class_group'):        
             ret =df.groupby([x,y]).size().reset_index().pivot(
                 columns=x, index=y, values=0)
-            return ret.reindex(index='blazar pulsar egal Gal unID'.split())
-        return simple_pivot(df).fillna(0).astype(int) # NaN are zero
+            return ret.reindex(index='blazar pulsar egal Gal bcu_unk unID'.split())
+        # return simple_pivot(df).fillna(0).astype(int) # NaN are zero
+        ret = simple_pivot(df).fillna(0).astype(int) # N
+        return ret.loc[:,'pulsar blazar'.split()] #reordder columns
     
     def plot_prediction_association(self, table, ax=None):
-        """Bar chart showing the prediction counts for each association group, according 
+        """Bar chart showing the predicted sources for each association group, according 
         to the predicted training class.  The association groups above the horizontal dashed line
         training classes, those below are targets. 
         """
 
-        fig, ax = plt.subplots(figsize=(10,5)) if ax is None else (ax.figure, ax)
-        ax = table.plot.barh(stacked=True, ax=ax, color=self.palette)
+        fig, ax = plt.subplots(figsize=(8,4)) if ax is None else (ax.figure, ax)
+        ax = table.plot.barh(stacked=True, ax=ax, color=self.palette[[1,0]]) #['cyan','0.5'] if dark_mode else  self.palette)
         ax.invert_yaxis()
-        ax.set(xlabel='Prediction counts', ylabel='Association group')
-        ax.legend( loc='upper right', #bbox_to_anchor=(0.78,0.75), loc='lower left',
-                frameon=True,   title='Training class')
+        ax.set(xlabel='Predicted sources', ylabel='Association group')
+        ax.legend( loc='center right', #bbox_to_anchor=(0.78,0.75), loc='lower left',
+                 title='Prediction', )#fontsize=12, title_fontsize=14)
+
         ax.axhline(1.5, ls='--', color='0.9' if dark_mode else '0.1')
-        ax.text(1200, 0.75, 'Used for training',ha='center')
-        # ax.text(1200, 5.5, 'Targets', ha='center')
+        ax.text(1000, 0.8, 'Training',ha='center')
+        ax.text(1000, 2.8, 'Targets', ha='center')
         return fig
     
     def pairplot(self, query='', **kwargs):  
@@ -196,7 +201,7 @@ class MLfit(SKlearn):
             df = self.df.query(query)
         kw = dict(kind='kde', hue=self.trainer_field, hue_order=self.trainer_names, height=2, corner=True)
         kw.update(**kwargs)
-        g = sns.pairplot(df, vars=self.features,  palette=self.palette[:len(self.trainer_names)], **kw,)
+        g = sns.pairplot(df, vars=self.features,  palette=list(self.palette)[:len(self.trainer_names)], **kw,)
         return g.figure
     
     def ep_vs_d(self, df=None):
@@ -313,11 +318,10 @@ class MLfit(SKlearn):
             print(mst, file=sys.stderr)
             df['diffuse']= np.nan
 
-        cols= """source_type glat glon variability significance class1 association flags r95 trainer
+        cols= """source_type glat glon variability significance class1 assoc_prob association flags r95 trainer
             Ep Fp d diffuse Ep_unc d_unc p_pulsar""".split()
         df.loc[:, cols].to_csv(summary_file, float_format='%.3f') 
         print(f'Wrote {len(df)}-record summary, using model {self.model}, to `{summary_file}` \n  columns: {cols}')
-
         
     def precision_recall(self, names=None, ax=None, test_size=0.33, ncount=10, ):
         """Plot of the precision, or purity, vs the recall, or efficiency,
@@ -490,7 +494,6 @@ class MLfit(SKlearn):
             ax.text(0.6,0.85, f'{len(cdf)}', transform=ax.transAxes, ha='right', fontsize='small')
         return fig
 
-
     def feature_correlations(self):
         r""" KDE plots showing the high partial separation for the pairs
         variability and $F_p$ on the left, and $\sqrt{d}$ and $E_p$ on the right.
@@ -499,34 +502,38 @@ class MLfit(SKlearn):
                                     gridspec_kw=dict(wspace=0.25))
         dfq= self.df #dfc
         sns.kdeplot(dfq, ax=ax1,  x=dfq.log_epeak.clip(-1,2), hue='trainer',
-                        y='sqrt_d', palette = self.palette[:2], common_norm=False,
+                        y='sqrt_d', palette = list(self.palette)[:2], common_norm=False,
                 clip=((-1,2),(-0.2,2.2)));
         ax1.set(**epeak_kw(show_100=True), yticks=np.arange(0,2.1,0.5),
                       ylabel='$\sqrt{d}$' )
         
         sns.kdeplot(dfq, ax=ax2,  x='log_fpeak', hue='trainer',
-                        y='log_var', palette = self.palette[:2], common_norm=False,  );
+                        y='log_var', palette = list(self.palette)[:2], common_norm=False,  );
         ax2.set(**fpeak_kw(), **var_kw('y'), ylim=(0.2,4.5))
         return fig
-        
-
+    
     def psrprob_vs_ep(self, df=None):
         """Scatter plots of the ML-assigned pulsar probability vs $E_p$. Upper plot: associated sources;
         lower plot: the unID sources, with marker color corresponding to the predicted class.
-    
+
         """
         if df is None: df=self.df
-        fig, (ax1,ax2) = plt.subplots(nrows=2, figsize=(8,8), sharex=True, sharey=True,
+        fig, (ax1,ax2) = plt.subplots(nrows=2, figsize=(7,6), sharex=True, sharey=True,
                                     gridspec_kw=dict(hspace=0.01))
+        
         kw1 = dict( ax=ax1, y='p_pulsar', x='log_epeak', s=30, )
-        for type in 'blazar pulsar'.split():
-            sns.scatterplot(data=df.query(f'trainer=="{type}"'), **kw1, label=type)
-        ax1.legend(title='Associated', title_fontsize=14,fontsize=14);
-        kw2 = dict( ax=ax2, y='p_pulsar', x='log_epeak', s=30, color='grey' )
+        for type,color in zip('pulsar blazar'.split(), self.palette[[1,0]]):
+            sns.scatterplot(data=df.query(f'trainer=="{type}"'), **kw1, color=color, label=type)
+        ax1.legend(title='Associated', title_fontsize=12,fontsize=12);
+
         ax1.set(xlim=(-1,2), ylim=(0,1), ylabel='' )
-        sns.scatterplot(data=df.query('association=="unID"'), hue='prediction', **kw2, );
-        ax2.legend(title='unID prediction',title_fontsize=14, fontsize=14)
+        
+        kw2 = dict( ax=ax2, y='p_pulsar', x='log_epeak', s=30, color='grey' )
+        sns.scatterplot(data=df.query('association=="unID"'), hue='prediction',hue_order='pulsar blazar'.split(),
+                        palette=list(self.palette[[1,0]]), **kw2, );
+        ax2.legend(title='unID prediction',title_fontsize=12, fontsize=12)
         ax2.set(yticks=np.arange(0,1, 0.2), **epeak_kw(), ylabel='')
+        
         fig.text( 0.01, 0.5, 'Pulsar probability', rotation='vertical', va='center')
         return fig
     
@@ -662,9 +669,10 @@ def doc(nc=2, np=2, nf=4, kde=False,  model='RFC' ):
         trainer_field = 'trainer',
         )
     def saveto(filename):
-        """ return dict for saving png if not dark"""
-        if dark_mode: return {}
-        return dict(save_to='figures/'+filename) 
+        """ return dict for saving png """
+        if dark_mode: 
+            return dict(facecolor='k', save_to='figures/ml_fit/'+filename+'.png')
+        return dict(save_to='figures/'+filename+'.png') 
 
 
     fn = FigNum(n=1, dn=0.1)
@@ -676,6 +684,7 @@ def doc(nc=2, np=2, nf=4, kde=False,  model='RFC' ):
         """)
     else:
         show(f"""# Supervised Model {model} Classification with {nc} classes and {nf} features""")
+        show_date()
 
     with capture_show('Setup:') as imp:
         self = Doc(skprop)
@@ -685,10 +694,10 @@ def doc(nc=2, np=2, nf=4, kde=False,  model='RFC' ):
     
     show(str(self))
     show(f"""## Feature distributions """)
-    show_fig(self.pairplot, fignum=fn.next, **saveto('features.png'))
+    show_fig(self.pairplot, fignum=fn.next, **saveto('features'))
 
     show( "Expand the important pairs")
-    show_fig(self.feature_correlations, fignum=fn.next, **saveto('feature_correlations.png'))
+    show_fig(self.feature_correlations, fignum=fn.next, **saveto('feature_correlations'))
     show(f"""## Train then apply prediction, add probs """)
     self.train_predict()
     probs= self.predict_prob(query=None)
@@ -714,7 +723,7 @@ def doc(nc=2, np=2, nf=4, kde=False,  model='RFC' ):
     show(f"""### All predictions""")
     table = self.prediction_association_table()
     show(table)
-    show_fig(self.plot_prediction_association,table, fignum=fn.next, **saveto('prediction_bar.png'))
+    show_fig(self.plot_prediction_association,table, fignum=fn.next, **saveto('prediction_bar'))
 
     show(f"""## The issue with this
          In figure {fn.next}, we show plots of the pulsar probability vs.  $E_p$ for the training classes, in 
@@ -724,7 +733,7 @@ def doc(nc=2, np=2, nf=4, kde=False,  model='RFC' ):
           a mixture of the two classes. 
          """)
     
-    show_fig(self.psrprob_vs_ep, fignum=fn.current, **saveto('pulsar_prob_vs_ep.png'))
+    show_fig(self.psrprob_vs_ep, fignum=fn.current, **saveto('pulsar_prob_vs_ep'))
 
     # show(f"""#### Write summary file, adding diffuse correlation""")
     self.write_summary()
@@ -760,7 +769,7 @@ def apply_kde(self, df=None, features=None):
         df[name+'_kde'] = u
     return df
     
-def kde_setup(kde_vars = 'sqrt_d log_epeak diffuse'.split(), nc=2,# bcu=False,
+def kde_setup(kde_vars = 'sqrt_d log_epeak  diffuse'.split(), nc=2,# bcu=False,
            cut = '0.15<Ep<4 & variability<25' , include_bcu=True  ):
     self = doc(nc=nc, np=1, kde=True,)# bcu=bcu)
 
@@ -783,7 +792,7 @@ def kde_setup(kde_vars = 'sqrt_d log_epeak diffuse'.split(), nc=2,# bcu=False,
             pulsar = 'msp psr'.split(),
             blazar = 'fsrq bll'.split(),
             egal  = 'agn gal sey nlsy1 sbg ssrq css rdg'.split(),
-            Gal ='gc bin glc hmb lmb nov pwn sfr snr spp'.split(),
+            Gal  = 'bin glc hmb lmb nov pwn sfr spp'.split(), # leave off gc, snr
             unID   = ['', 'unk', 'bcu'],
             )
         inv = dict()

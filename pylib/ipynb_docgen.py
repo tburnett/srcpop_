@@ -49,7 +49,7 @@ import numpy as np # type: ignore
 
 __all__ = ['nbdoc', 'image', 'figure', 'monospace', 'ShowPrintout','capture', 'capture_hide', 
         'capture_show', 'shell', 'create_file', 'ipynb_doc', 'get_nb_namespace', 'special_prefix', 
-        'figure_number', 'display_markdown', 'FigureWrapper','show', 'show_fig', 'figure_callback']
+        'figure_number', 'display_markdown', 'FigureWrapper','show', 'show_fig', 'show_date', 'figure_callback']
 
 special_prefix = ''
 
@@ -824,7 +824,7 @@ def show_fig(fn, *pars, fignum=None, caption=None,
         cpn = cpn.format(**format_kw)
     show( fig, fignum=fignum,  caption=cpn, facecolor=facecolor)
     if save_to is not None:
-        fig.savefig(save_to, facecolor='w',  bbox_inches='tight')
+        fig.savefig(save_to, facecolor='w' if facecolor is None else facecolor,  bbox_inches='tight')
 
 def show_date():
     import datetime

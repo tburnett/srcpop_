@@ -102,7 +102,7 @@ class FeatureSpace(dict):
             grid_kde =  self.grid[comp+'_kde'] = kdes[comp](self.grid)
 
         # calculate normalization, save factors
-        norms = grid_kde.sum() * self.volume/self.N**3
+        norms = grid_kde.sum() * self.volume/self.N**len(self.names)
         grid_kde /= norms
         assert np.any(~pd.isna(grid_kde)), 'Found a Nan on the grid!'
 
@@ -132,7 +132,7 @@ class FeatureSpace(dict):
         basically an integral over the other variables
         """        
         t = self.grid.copy().groupby(varname).sum()*(self.volume/self.size[varname])/self.N**2
-        return t.iloc[:, -len(self.names):]
+        return t.iloc[:, -3:] #3=components? len(self.names):]
     
     def projection_info(self, unID):
         """Return a dict in variable names of projection dataframes
@@ -178,7 +178,7 @@ class FeatureSpace(dict):
                 diffuse = '$D$')
         fig = plt.figure(figsize=(12,7), layout='constrained')
         fig.set_facecolor('k' if self.dark_mode else 'w') # why here?
-        axx = fig.subplots(ncols=3 ,nrows=3,  sharex='col',
+        axx = fig.subplots(ncols=len(self.limits) ,nrows=3,  sharex='col',
                             gridspec_kw=dict(hspace=0.1, wspace=0.1)
         )    
         for (i, (cls_name, df)), color in zip(enumerate(df_dict.items()), palette):
@@ -195,11 +195,11 @@ class FeatureSpace(dict):
                 sns.lineplot( ax=ax, **self.projection_dict(var_name, cls_name), 
                             color=color, ls='-', marker='', lw=2)
                 ax.set( xlim=self.limits[var_name], ylabel='', yticks=[], 
-                       facecolor='k' if self.dark_mode else 'w',
+                    facecolor='k' if self.dark_mode else 'w',
                     xlabel= labels[var_name])
                                 
             axx[i,0].set_ylabel(cls_name+f'\n{len(df)}', rotation='horizontal', ha='center')
-    
+
         return fig
         
     def component_comparison(self, unID, norm, palette):
@@ -306,7 +306,7 @@ class FeatureSpace(dict):
         return fig
     
     @classmethod
-    def runit(cls, data, dark_mode, palette):
+    def runit(cls, data, dark_mode, palette, limits=None):
         """Perform the KDE analysis
         
         """
@@ -314,11 +314,11 @@ class FeatureSpace(dict):
         from pylib.gevatar_fits import Fitter
         
         self = fs= cls(N=25,
-                limits=dict( 
-                    diffuse=(-1, 2),
-                    sqrt_d=(0.,np.sqrt(2)),
-                    log_epeak=np.log10([0.15, 10]),
-                )
+                limits=limits, #dict( 
+                #     diffuse=(-1, 2),
+                #     sqrt_d=(0.,np.sqrt(2)),
+                #     log_epeak=np.log10([0.15, 10]),
+                # )
         )
 
 

@@ -8,7 +8,10 @@ import matplotlib.pyplot as plt
 from astropy.wcs import WCS
 from astropy.coordinates import SkyCoord
 from astropy.io import fits
-import healpy
+# https://astropy-healpix.readthedocs.io/en/latest/healpy_compat.html
+from astropy_healpix import healpy
+# import healpy
+
 
 #| export
 def _transform_plot_args(*args):
@@ -283,7 +286,7 @@ class ZEAfigure(WCS, SkyPlotMixin):
         elif type(center)==str:
             center = SkyCoord.from_name(center).galactic
         else: raise Exception( 'Expect center to be: SkyCoord, name, or (l,b) tuple')
-        # size is single float or tuple(floats) for wicth, height in pixelsize units
+        # size is single float or tuple(floats) for width, height in pixelsize units
         size = np.atleast_1d(size).astype(float)
         if len(size)==1: size=np.full(2, size[0])
         assert len(size)==2, 'Expect size to be single float, or (float, float) tuple'

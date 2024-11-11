@@ -386,8 +386,14 @@ class Fermi4FGL(CatDF, pd.DataFrame):
         return func(pars, e0=row['Pivot_Energy']) if pars is not None else None    
 
     def get_series(self, name):
-        """Return the full record for the source as a Pandas Series object
+        """If name is a source:
+                Return the full record for the source as a Pandas Series object
+            else
+                Return the column 
         """
+        if name not in self.index:
+            # it is a field name
+            return pd.Series(self.field(name), index=self.index)
         index = list(self.index).index(name)
         assert index>=0, f'Failed to find {name}'
         s = self.data[index]

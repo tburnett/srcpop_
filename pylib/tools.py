@@ -1,6 +1,7 @@
 from dataclasses import dataclass
 
 import matplotlib.pyplot as plt
+plt.rcParams['figure.constrained_layout.use'] = True
 import numpy as np
 import pandas as pd
 import seaborn as sns
@@ -24,11 +25,23 @@ def set_theme(argv):
         plt.rcParams['figure.facecolor']='white'
     return dark_mode
 
+def axis_kw(axis, d):
+    return dict( (axis+k, v) for k,v in d.items() )
+
+def d_kw(axis='x'):
+    return axis_kw(axis, 
+                   dict(label='$d$', scale='log', ticks=[0.2, 1, 2], ticklabels='0.2 1 2'.split(), lim=(0.2,2.05))
+    )
+def rootd_kw(axis='y'):
+    return axis_kw(axis,
+        dict(label='$\sqrt{d}$', ticks=np.arange(0,1.5, 0.5))
+    )
+
 def fpeak_kw(axis='x'):
     return {axis+'label':r'Peak flux $F_p\ \ \mathrm{ (eV\ cm^{-2}\ s^{-1})}$', 
             axis+'ticks': np.arange(-2,4.9,2),
             axis+'ticklabels': '$10^{-2}$ 1 100 $10^4$'.split(),
-            axis+'lim': (-2,5 ),
+            axis+'lim': (-3,5 ),
             }
 def diffuse_kw(axis='x'):
     return {axis+'label':r'Diffuse energy flux $\mathrm{ (eV\ cm^{-2}\ s^{-1}\ deg^{-2})} $',
@@ -83,8 +96,9 @@ class FigNum:
     def __repr__(self):
         return self.current
     
-def show_date():
+def show_date(title=None):
     from pylib.ipynb_docgen import show
+    if title is not None: show(f"""<font size="+3"> {title}</font>""")
     import datetime
     date=str(datetime.datetime.now())[:16]
     show(f"""<h5 style="text-align:right; margin-right:15px"> {date}</h5>""")

@@ -1,23 +1,56 @@
 """
+See https://fermi.gsfc.nasa.gov/ssc/data/access/lat/14yr_catalog/
+for files.
 """
 import sys
 import numpy as np
 import matplotlib.pyplot as plt
 import healpy
+# from astropy_healpix import healpy
 import seaborn as sns
-
-from pylib.skymaps import HPmap
+from astropy.coordinates import SkyCoord
+from pylib.skymaps import HPmap, AITfigure
 from pylib.tools import  update_legend, set_theme
 
-# dark_mode = set_theme(sys.argv)
+dark_mode = set_theme(sys.argv)
 
+filename_dict = dict(
+    v07='gll_iem_v07_hpx.fits',  # hp projection of standard
+    v13 = 'gll_iem_uw1216_v13.fits', # DR4 smoothed version
+    )
+
+version = 'v13'
 class Diffuse:
     
-    def __init__(self, filename='gll_iem_v07_hpx.fits', field=11, energy=1000):
+    def __init__(self, 
+                    filename=filename_dict[version],           
+                field=11, energy=1000):
+        """field is the index into the 28 long energy array, close to 1000
+        """
         import os
+        from astropy.io import fits
+        from astropy.wcs import WCS
+        from astropy.coordinates import SkyCoord
+
         self.energy = energy
         self.fits_file = os.path.expandvars(f'$FERMI/diffuse/{filename}')
-        self.diffuse_hpm = HPmap.from_FITS(self.fits_file, field=field, name='',)
+        with fits.open(self.fits_file) as hdus:
+            if hdus[1].name=='ENERGIES':
+                # it is an image files. to use wcs must fake a 2-d image map
+                hdr = dict((key,val) for (key,val) in hdus[0].header.items() if key[-1]!='3' and key!='COMMENT')
+                hdr['NAXIS'] = 2  # need to fool WCS into thinking only two axes
+                wcs = WCS(hdr)
+                self.nside=256 #use this
+                coords = healpy.pix2ang(self.nside, np.arange(12*self.nside**2), lonlat=True)
+                xpix, ypix = wcs.world_to_pixel(SkyCoord(*coords, unit='deg', frame='galactic'))
+                hpm = HPmap(hdus[0].data.T[(xpix+0.5).astype(int), (ypix+0.5).astype(int), field], name='')
+            else:
+                # assume healpix
+                hpm = HPmap.from_FITS(self.fits_file, field=field, name='',)
+                self.nside=hdus['SKYMAP'].header['NSIDE']
+            self.energies = np.array(hdus['ENERGIES'].data).astype('float')
+
+        self.diffuse_hpm = hpm #HPmap.from_FITS(self.fits_file, field=field, name='',)
         self.unit = r'$\rm{eV\ cm^{-2}\ s^{-1}\ deg^{-2}}$' #self.diffuse_hpm.unit
         print(f"""* Load diffuse file,  `{self.fits_file}`\n  unit={self.unit}\n select energy= {energy} MeV""")
  
@@ -44,7 +77,7 @@ class Diffuse:
         from astropy.io import fits
         with fits.open(self.fits_file) as hdus:
             data = hdus[1].data
-            energies = hdus[2].data.field(0)
+            energies = hdus['ENERGIES'].data.field(0)
 
         fig, ax = plt.subplots(figsize=(6,6))
         ax.set(xlabel='Energy (GeV)',
@@ -154,4 +187,128 @@ class Diffuse:
         sns.histplot(data, y=y, ax=g.ax_marg_y, **hkw)
         sns.histplot(data, x=x, ax=g.ax_marg_x, **hkw)
         update_legend(ax, data, hue=hue_kw['hue'],  fontsize=12,   loc='lower left')
-        return g.fig     
+        return g.figure     
+
+
+class IsotropicDiffuse:
+    """Implement isotropic (extra-galactic) function of distribution values
+    """
+    def __init__(self, reload=False, binsize=0.05,
+            cache_file=f'files/isotropic_diffuse_{version}.pkl'):
+
+        from pathlib import Path
+        import pandas as pd
+        if Path(cache_file).exists() and not reload:
+            self.cache = pd.read_pickle(cache_file)
+        else:
+            diff = Diffuse()
+            gbins=np.arange(-1,2.01,binsize)
+            gx = 0.5*(gbins[1:]+gbins[:-1])
+            ghist, _ = np.histogram(diff.diffuse_hpm.map , gbins )
+            gy = ghist/sum(ghist)/binsize
+            self.cache = pd.DataFrame.from_dict(dict(gx=gx, gy=gy))
+            self.cache.to_pickle(cache_file)
+            print(f'IsotropicDiffuse: Wrote cache file {cache_file}')
+            
+    def __call__(self,x):
+        return np.interp(x, self.cache.gx, self.cache.gy)
+
+
+class DiffuseSED:
+    
+    unit_factor = 1e6/3282.80635  # convert from erg/sr to eV/deg^2s
+
+    def __init__(self, filename=filename_dict[version],  
+                 ):
+        import os
+        from astropy.io import fits
+        from astropy.wcs import WCS
+        
+        with fits.open(os.path.expandvars(f'$FERMI/diffuse/')+filename)  as hdus: 
+            ## TODO: allow for healpix format
+            # need to fool WCS into thinking only two axes
+            hdr = dict((key,val) for (key,val) in hdus[0].header.items() if key[-1]!='3' and key!='COMMENT')
+            hdr['NAXIS'] = 2  
+            self.wcs = WCS(hdr)
+            self.grid = np.array(hdus[0].data)
+            self.energies = np.array(hdus['ENERGIES'].data).astype(float)
+            
+    def __call__(self, skycoord):
+        " return flux array for pixel at skycoord"
+        xpix,ypix = self.wcs.world_to_pixel( skycoord )
+        return self.grid[:, int(ypix),int(xpix)]
+
+    def sed(self, skycoord):
+        """ Return a SED for the point
+        input is log(e), returns log(flux)
+        """
+        loge = np.log(self.energies)
+        df = self
+        energies = self.energies
+        
+        class SED:
+ 
+            def __init__(self):
+                from scipy.interpolate import CubicSpline
+                self.cs = CubicSpline(loge, np.log(  df(skycoord) * energies**2 ))
+                
+            def __call__(self, x, nu=0):
+                return self.cs(x,nu) #np.interp(x, self.xp, self.yp)
+
+            def max(self, lims=(4,9)):
+                # position of max
+                from scipy.optimize import brentq
+                try:
+                    return brentq(lambda x: self(x,1), *lims)
+                except:
+                    return lims[0]
+   
+            def curvature(self): 
+                """curvature (negative of appox 2nd derivative)
+                """
+                mx = self.max()
+                u, d = self([mx-1, mx+1])
+                return round(2*self(mx) -u -d , 2)
+  
+        return SED()   
+    
+    def eflux_plot(self, *, l=0, ax=None):
+        """
+        """
+
+        fig, ax = plt.subplots(figsize=(6,6)) if ax is None else (ax.figure, ax)
+        
+        # normalization factor to units below
+        norm = 1e6/3282.80635 
+        ee = np.logspace(2,5, 40)
+        txt_kw = dict( backgroundcolor='k' if dark_mode else 'w',
+                    va='center', fontsize=14)
+        
+        for b in (-90,-30, -2 ,0,2,30,90):
+            f = self.sed( SkyCoord(l,b, unit='deg', frame='galactic') ) 
+            # convert from log space, adjust units
+            fp = lambda e :  np.exp(f( np.log(e))) * norm
+            if b==0:
+                ax.text(10, fp(1e4), '$b=0$', ha='center', **txt_kw)
+            else: 
+                ax.text( 10,  fp(1e4), f'{b}', ha=('right' if b<0 else 'left'), **txt_kw)
+            ax.loglog(ee/1e3, fp(ee), '-', label=f'{b}')
+            
+        ax.set(xlabel='Energy (GeV)', xticks=np.logspace(-1,2,4), xticklabels='0.1 1 10 100'.split(),
+            ylim=(1e-2, 3e2),  ylabel=r'Energy flux ($\mathrm{eV\ s^{-1}\ cm^{-2}\ deg^{-2}}$)');
+        return fig
+
+    @classmethod
+    def ait_plot(cls, nside=128, energy=1e3, fig=None, **kwargs):
+        # takes a minute with nside 64
+
+        self = cls()
+        lb = healpy.pix2ang(nside, range(12*nside**2), lonlat=True)
+        sc = SkyCoord(*lb, unit='deg', frame='galactic')
+        loge = np.log(energy)
+        z = np.array([self.sed(t)(loge) for t in sc] )
+
+        return (AITfigure(fig, **kwargs)
+            .imshow(np.array(z)/2.303 + np.log10(self.unit_factor), cmap='jet')
+            .colorbar(shrink=0.8, label=r'$\mathrm{\log_{10}(Flux)}$')
+            ).figure  
