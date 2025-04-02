@@ -1,14 +1,20 @@
 from dataclasses import dataclass
+import sys, contextlib
 
 import matplotlib.pyplot as plt
 plt.rcParams['figure.constrained_layout.use'] = True
 import numpy as np
 import pandas as pd
 import seaborn as sns
+from pathlib import Path
 
 def set_theme(argv):
     plt.rcParams['figure.figsize']=[5,3]
+    plt.rcParams['figure.dpi'] = 72
+    plt.rcParams['axes.grid'] = True
+    plt.rcParams['grid.alpha'] = 0.5
     # sns.set_theme('notebook' if 'talk' not in argv else 'talk', font_scale=1.25) 
+    
     sns.set_theme( 'talk', font_scale=1.) 
     if 'paper' in argv: 
         # sns.set_theme('paper')
@@ -25,6 +31,9 @@ def set_theme(argv):
         plt.rcParams['figure.facecolor']='white'
     return dark_mode
 
+if 'dark' in sys.argv:
+    dark_mode = set_theme(sys.argv)
+
 def axis_kw(axis, d):
     return dict( (axis+k, v) for k,v in d.items() )
 
@@ -34,7 +43,7 @@ def d_kw(axis='x'):
     )
 def rootd_kw(axis='y'):
     return axis_kw(axis,
-        dict(label='$\sqrt{d}$', ticks=np.arange(0,1.5, 0.5))
+        dict(label=r'$\sqrt{d}$', ticks=np.arange(0,1.5, 0.5))
     )
 
 def fpeak_kw(axis='x'):
@@ -82,6 +91,13 @@ def ternary_plot(df, columns=None, ax=None):
     tax.boundary()
     return fig
 
+@contextlib.contextmanager
+def stdout_redirect(where):
+    sys.stdout = where
+    try:
+        yield where
+    finally:
+        sys.stdout = sys.__stdout__
 
 @dataclass
 class FigNum:

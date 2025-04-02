@@ -32,6 +32,38 @@ class Gaussian_kde(stats.gaussian_kde):
         """ For convenience"""
         return self.evaluate(df.loc[:,self.columns].T) 
     
+    def make_grid(self, *, nbins=25, limits=None):
+        """Create a grid of values with nbins bins in each dimension.
+        if limits specified, must be a dict with keys=column names. Otherwise uses observed 
+        variable limits.
+
+        Returns dataframe
+        """
+        def make_bins(a,b,nbins):
+            # centers for nbins bins from a to b
+            d = (b-a)/nbins
+            return np.linspace(a+d/2, b-d/2, nbins) 
+        
+
+        assert len(self.columns==2), 'Implemented only for 2-D'
+
+        # extract from limits
+        lims = self.limits if limits is None else limits
+        self.grid = [make_bins(*lims[x],nbins) for x in self.columns]    
+        xg, yg = self.grid
+        gdf = pd.DataFrame( [[self.evaluate((x,y)) for x in xg ] for y in yg], 
+                        index=yg, columns=xg).astype(float)
+        return gdf
+    
+    def contourplot(self, ax=None, limits=None, nbins=25,  **kwargs):
+        """Make a contour plot
+        
+        """
+        fig, ax = plt.subplots(figsize=(6,6)) if ax is None else (ax.figure, ax)
+        gdf = self.make_grid(limits=limits, nbins=nbins)
+        ax.contour(gdf.columns, gdf.index, gdf, **kwargs)
+        return fig
+    
     @property
     def extent(self):
         """For imshow"""
@@ -173,8 +205,8 @@ class FeatureSpace(dict):
         the KDE fits.
 
         """
-        labels = dict(sqrt_d = '$\sqrt{d}$',
-                log_epeak = '$\log_{10}(E_p)$',
+        labels = dict(sqrt_d = r'$\sqrt{d}$',
+                log_epeak = r'$\log_{10}(E_p)$',
                 diffuse = '$D$')
         fig = plt.figure(figsize=(12,7), layout='constrained')
         fig.set_facecolor('k' if self.dark_mode else 'w') # why here?
@@ -228,8 +260,8 @@ class FeatureSpace(dict):
     
     def data_model(self, norms, unID, fig=None, palette=None):
         
-        var_labels = dict(sqrt_d = '$\sqrt{d}$',
-              log_epeak = '$\log_{10}(E_p)$',
+        var_labels = dict(sqrt_d = r'$\sqrt{d}$',
+              log_epeak = r'$\log_{10}(E_p)$',
               diffuse = '$D$')
 
         if fig is None:

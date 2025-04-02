@@ -45,15 +45,15 @@ class MLfit(SKlearn):
     ):
         self.df, self.cat_len = self.load_data(fgl)
         super().__init__(self.df, skprop)
-        self.palette = np.array(['0.5','cyan','magenta'] if dark_mode else '0.5  blue red'.split())
+        self.palette = np.array(['lightyellow','cyan','magenta'] if dark_mode else 'lightyellow  blue red'.split())
         self.cache_file = f'files/{dataset}_{len(self.trainer_names)}_class_classification.csv'
         
         self.hue_kw={}
         self.size_kw={}
         if dark_mode:
-            self.hue_kw.update(palette='cyan 0.5 magenta'.split(), edgecolor=None)
+            self.hue_kw.update(palette='cyan lightyellow magenta'.split(), edgecolor=None)
         else:
-            self.hue_kw.update(palette='violet 0.5 red'.split())   
+            self.hue_kw.update(palette='violet lightyellow red'.split())   
     
     def __repr__(self):
         return f"""MLfit applied to 4FGL-{dataset.upper()} \n\n{super().__repr__()}
@@ -179,7 +179,7 @@ class MLfit(SKlearn):
         """
 
         fig, ax = plt.subplots(figsize=(8,4)) if ax is None else (ax.figure, ax)
-        ax = table.plot.barh(stacked=True, ax=ax, color=self.palette[[1,0]]) #['cyan','0.5'] if dark_mode else  self.palette)
+        ax = table.plot.barh(stacked=True, ax=ax, color=self.palette[[1,0]]) #['cyan','lightyellow'] if dark_mode else  self.palette)
         ax.invert_yaxis()
         ax.set(xlabel='Predicted sources', ylabel='Association group')
         ax.legend( loc='center right', #bbox_to_anchor=(0.78,0.75), loc='lower left',
@@ -534,7 +534,7 @@ class MLfit(SKlearn):
         ax2.legend(title='unID prediction',title_fontsize=12, fontsize=12)
         ax2.set(yticks=np.arange(0,1, 0.2), **epeak_kw(), ylabel='')
         
-        fig.text( 0.01, 0.5, 'Pulsar probability', rotation='vertical', va='center')
+        fig.text( -0.05, 0.5, 'Pulsar probability', rotation='vertical', va='center')
         return fig
     
 

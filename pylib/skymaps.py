@@ -11,7 +11,10 @@ from astropy.io import fits
 # https://astropy-healpix.readthedocs.io/en/latest/healpy_compat.html
 from astropy_healpix import healpy
 # import healpy
+from astropy_healpix import healpy
 
+def get_nside(v):
+    return healpy.npix_to_nside(len(v))
 
 #| export
 def _transform_plot_args(*args):
@@ -35,8 +38,10 @@ def _transform_plot_args(*args):
             sc  = SkyCoord(df.glon, df.glat, unit='deg', frame='galactic')
         elif 'GLON' in df:
             sc  = SkyCoord(df.GLON, df.GLAT, unit='deg', frame='galactic')
+        elif 'ra' in df:
+            sc = SkyCoord(df.ra, df.dec, unit='deg', frame='fk5').galactic
         else:
-            raise ValueError('DataFrame must have GLON,GLAT or glon,glat')
+            raise ValueError('DataFrame must have GLON,GLAT or glon,glat or ra,dec')
     elif isinstance(arg, SkyCoord):
         sc = arg.galactic
     elif type(arg)==str:
@@ -103,6 +108,12 @@ class SkyPlotMixin():
     def legend(self, *pars, **kwargs):
         self.ax.legend(*pars, **kwargs)
         return self
+    
+    def title(self, *pars, **kwargs):
+        self.ax.set_title(*pars, **kwargs)
+        return self
+    
+
 
 
 class AITfigure(SkyPlotMixin):
@@ -151,7 +162,7 @@ class AITfigure(SkyPlotMixin):
         import healpy
         ax = self.ax
 
-        nside = healpy.get_nside(hparray)
+        nside = get_nside(hparray)
         
         # code inspired by https://stackoverflow.com/questions/46063033/matplotlib-extent-with-mollweide-projection
         # make a mesh grid for lon,lat in degrees
@@ -338,7 +349,7 @@ class ZEAfigure(WCS, SkyPlotMixin):
 
             import healpy
             # make a meshgrid of the coordinates of the pixels to display
-            nside = healpy.get_nside(dmap)
+            nside = get_nside(dmap)
             nx, ny = self.array_shape
             pixlists = list(range(1,nx+1)),list(range(1,ny+1))
             cgrid = self.pixel_to_world(*np.meshgrid(*pixlists) )
@@ -567,7 +578,7 @@ class HPmap(object):
         self.name = name
         self.cblabel = cblabel if cblabel is not None else unit
         self.unit = unit
-        self.nside = healpy.get_nside(hpmap)
+        self.nside = get_nside(hpmap)
         # reorder as defaut RING if nest is set
         self.map = hpmap if not nest else healpy.reorder(hpmap, n2r=True)
 

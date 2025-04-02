@@ -5,14 +5,14 @@ for files.
 import sys
 import numpy as np
 import matplotlib.pyplot as plt
-import healpy
-# from astropy_healpix import healpy
+# import healpy
+from astropy_healpix import healpy
 import seaborn as sns
 from astropy.coordinates import SkyCoord
 from pylib.skymaps import HPmap, AITfigure
 from pylib.tools import  update_legend, set_theme
 
-dark_mode = set_theme(sys.argv)
+# dark_mode = set_theme(sys.argv)
 
 filename_dict = dict(
     v07='gll_iem_v07_hpx.fits',  # hp projection of standard

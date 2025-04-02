@@ -124,7 +124,7 @@ def G_kw(axis='x'):
 
 
 def multi_d(data, ):
-    """
+    r"""
     Matrix of scatter plots of $d_{unc}$ vs $d$ for each population, by row, with left column for $Ep<1 $ GeV.
     The dashed red lines denote $ 1\sigma$ boundaries for the range 0 (no curvature) to 4/3 (the limit for curvataure radiation).
     """
@@ -442,7 +442,7 @@ class GalFunctions(dict):
         self.func_grid.index = self.G05
         self.data = data
         
-    def plot_unID_pred(self, pred='pulsar', *, ax=None, 
+    def plot_unID_pred(self, pred='pulsar', *, ax=None, df=None, 
         adjust=[365,280], # total msp, psr source counts
         text_kw=dict(x=0.7, y=30, s='?', color='r', ha='center', fontsize=60),
         ):
@@ -450,7 +450,8 @@ class GalFunctions(dict):
         """
         assert pred in 'pulsar blazar'.split()
         kde_table = self.func_grid.copy()['msp psr'.split()]*adjust*self.hist_binsize
-        unid_pred = self.data.query(f'source_type=="unID-{pred}"')
+        data = self.data if df is None else df
+        unid_pred = data.query(f'source_type=="unID-{pred}"')
 
         fig, ax = plt.subplots(figsize=(6,5)) if ax is None else (ax.figures, ax)
         
@@ -843,7 +844,9 @@ class KDEuv(dict):
 
     def scat_plot(self, norms ):
         fig, (ax1,ax2) = plt.subplots(nrows=2, figsize=(8,11), sharex=True, height_ratios=(3,2))
-        ax1.set(xlim=(-1,1), ylim=(-1, 0.35), yticks=np.arange(-1,0.5,0.5), xticks=np.arange(-1,1.01,0.5),)
+        ax1.set(xlim=(-1,1), ylim=(-1, 0.35), 
+                yticks=np.arange(-1,0.5,0.5), ylabel='log($d$)',
+                xticks=np.arange(-1,1.01,0.5),)
         self.plot_kde_contours(ax1, cmaps='Reds Greys'.split())
         
         self.plot_unid(ax1, ax2,(q:=''), label=f'unID ({len(self.unid)})')
@@ -856,7 +859,7 @@ class KDEuv(dict):
             ax2.plot(x,y, label=train+f' ({norm})')
             total += y
         ax2.plot(x, total, lw=4, color='w', ls='--', label=f'Total ({sum(norms)})')
-        ax2.set(**epeak_kw())
+        ax2.set(**epeak_kw(), )
         ax2.legend(fontsize=12)
         
         fig.suptitle(self.title+' '+q)
