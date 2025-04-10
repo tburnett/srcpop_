@@ -1,15 +1,12 @@
 import sys
-from pathlib import Path
-
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import seaborn as sns
 
 from pylib.kde import FeatureSpace, Gaussian_kde
-# from pylib.ml_fit  import doc
-from pylib.tools import set_theme, epeak_kw, diffuse_kw , update_legend, rootd_kw, fpeak_kw
-from pylib.ipynb_docgen import show, show_fig, show_date
+from pylib.tools import (set_theme, epeak_kw, update_legend, fpeak_kw)
+from pylib.ipynb_docgen import (show, show_fig, show_date)
 
 def add_classification_prob(df, filename='files/dr4_2_class_classification.csv'):
     """
@@ -37,8 +34,7 @@ def kde_setup(kde_vars = 'sqrt_d log_epeak diffuse'.split(),
             cut = '0.12<Ep<10 & variability<30' ,
             title='Unsupervised KDE analysis'  ):
     
-    # self = doc(nc=nc, np=1, kde=True,)
-    # df = self.df
+
     show(f"""<font size="+3"> {title}</font>""")
     show_date()
     show(f"""# Data setup
@@ -101,11 +97,83 @@ def kde_setup(kde_vars = 'sqrt_d log_epeak diffuse'.split(),
 
     df.to_csv((filename:='files/kde_data.csv'))
     show(f'saved KDE setup to `{filename}`')
-    return dfc # , kde_probs
+    return dfc 
+
+class StudyML:
+    """Class to hold the ML functions and data
+    """
+
+    def __init__(self, 
+                 title = 'Study ML results with galacticity ',
+                 ml_filename='files/dr4_2_class_3_features.csv', 
+                 kde_vars='sqrt_d log_epeak diffuse'.split(), 
+                 cut = '0.12<Ep<10 & variability<30' ):
+        
+        self.df = df = pd.read_csv(ml_filename, index_col=0)
+        self.kde_vars = kde_vars
+        self.cut = cut
+        show(f"""<font size="+3"> {title}</font>""")
+        show_date()
+        show(f"""# Data setup
+        * Load ML analysis results from `{ml_filename}`""")
+
+        df['sqrt_d'] = np.sqrt(df.d.clip(0,2))
+        df['log_epeak'] = np.log10(df.Ep)
+        df['log_fpeak'] = np.log10(df.Fp)
+        # df['diffuse'] = df.diffuse.clip(0,2)
+
+        def make_group(df):
+
+            def groupit(s):
+                if s.association in 'psr msp unID'.split(): return s.association
+                if s.association in 'bll fsrq'.split(): return 'blazar'
+                if s.association in 'bcu unk'.split(): return 'bcu_unk'
+                return np.nan
+
+            df['subset'] = df.apply(groupit, axis=1)
+        make_group(df) 
+        show(f"""* Create `subset` with simple grouping of associations """)
+        show(pd.Series(self.df.groupby('subset').size(), name=''))
+        
+
+        def make_aclass(df):
+            """ Return the super classification group name for each source
+            """
+            gtbl = dict (
+                pulsar = 'msp psr'.split(),
+                blazar = 'fsrq bll'.split(),
+                bcu_unk = 'bcu unk'.split(),
+                egal  = 'agn gal sey nlsy1 sbg ssrq css rdg'.split(),
+                Gal ='bin glc hmb lmb pwn sfr snr spp'.split(), # leave off gc, nov
+                unID   = [''],
+                )
+            inv = dict()
+            for gname, cls_list in gtbl.items():
+                for cls in cls_list:
+                    inv[cls]=gname
+            df['association_class']=  df.association.apply(lambda s: inv.get(s,s))
+    
+        make_aclass(df)
+        show(f"""* Create `association_class` with super classification """)
+        show(pd.Series(self.df.groupby('association_class').size(), name=''))
+            
+        def apply_kde(df, features):
+
+            for name, sdf in df.groupby('subset'):
+                try:
+                    gde = Gaussian_kde(sdf,  features)
+                except Exception as msg:
+                    print(msg, file=sys.stderr)
+                u = gde(df)
+                df[name+'_kde'] = u
+            return df
+        
+        self.kde_probs = apply_kde(df, kde_vars)
+        self.kde_probs.to_csv('files/kde_data.csv')
+        show(f'* saved KDE setup to `files/kde_data.csv`')
 
 def axis_kw(axis, d):
     return dict( (axis+k, v) for k,v in d.items() )
-
 
 def d_kw(axis='x'):
     return axis_kw(axis, 
@@ -121,7 +189,6 @@ def G_kw(axis='x'):
     return axis_kw(axis,
                 dict(label='$G$', lim=(-1,2), ticks=np.arange(-1,2.1,1))
                 )
-
 
 def multi_d(data, ):
     r"""
